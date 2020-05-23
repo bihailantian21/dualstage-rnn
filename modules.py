@@ -24,9 +24,12 @@ class Encoder(nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.T = T
+        self.tanh = nn.Tanh()
 
         self.lstm_layer = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=1)
-        self.attn_linear = nn.Linear(in_features=2 * hidden_size + T - 1, out_features=1)
+        self.attn_linear1 = nn.Linear(in_features=2 * hidden_size, out_features=T - 1)
+        self.attn_linear2 = nn.Linear(in_features=T - 1, out_features=T - 1)
+        self.attn_linear3 = nn.Linear(in_features=T - 1, out_features=1)
 
     def forward(self, input_data):
         # input_data: (batch_size, T - 1, input_size)
@@ -38,13 +41,19 @@ class Encoder(nn.Module):
 
         for t in range(self.T - 1):
             # Eqn. 8: concatenate the hidden states with each predictor
-            x = torch.cat((hidden.repeat(self.input_size, 1, 1).permute(1, 0, 2),
-                           cell.repeat(self.input_size, 1, 1).permute(1, 0, 2),
-                           input_data.permute(0, 2, 1)), dim=2)  # batch_size * input_size * (2*hidden_size + T - 1)
+            z1_ = torch.cat((hidden.repeat(self.input_size, 1, 1).permute(1, 0, 2),
+                           cell.repeat(self.input_size, 1, 1).permute(1, 0, 2)), dim=2)
+            z1 = self.attn_linear1(z1_)
+            z2 = self.attn_linear2(input_data.permute(0, 2, 1))
+            x = z1 + z2
+            z3 = self.attn_linear3(self.tanh(x.view(-1, self.T - 1)))
+            # x = torch.cat((hidden.repeat(self.input_size, 1, 1).permute(1, 0, 2),
+            #                cell.repeat(self.input_size, 1, 1).permute(1, 0, 2),
+            #                input_data.permute(0, 2, 1)), dim=2)  # batch_size * input_size * (2*hidden_size + T - 1)
             # Eqn. 8: Get attention weights
-            x = self.attn_linear(x.view(-1, self.hidden_size * 2 + self.T - 1))  # (batch_size * input_size) * 1
+            # x = self.attn_linear(x.view(-1, self.hidden_size * 2 + self.T - 1))  # (batch_size * input_size) * 1
             # Eqn. 9: Softmax the attention weights
-            attn_weights = tf.softmax(x.view(-1, self.input_size), dim=1)  # (batch_size, input_size)
+            attn_weights = tf.softmax(z3.view(-1, self.input_size), dim=1)  # (batch_size, input_size)
             # Eqn. 10: LSTM
             weighted_input = torch.mul(attn_weights, input_data[:, t, :])  # (batch_size, input_size)
             # Fix the warning about non-contiguous memory
