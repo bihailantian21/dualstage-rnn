@@ -47,11 +47,6 @@ class Encoder(nn.Module):
             z2 = self.attn_linear2(input_data.permute(0, 2, 1))
             x = z1 + z2
             z3 = self.attn_linear3(self.tanh(x.view(-1, self.T - 1)))
-            # x = torch.cat((hidden.repeat(self.input_size, 1, 1).permute(1, 0, 2),
-            #                cell.repeat(self.input_size, 1, 1).permute(1, 0, 2),
-            #                input_data.permute(0, 2, 1)), dim=2)  # batch_size * input_size * (2*hidden_size + T - 1)
-            # Eqn. 8: Get attention weights
-            # x = self.attn_linear(x.view(-1, self.hidden_size * 2 + self.T - 1))  # (batch_size * input_size) * 1
             # Eqn. 9: Softmax the attention weights
             attn_weights = tf.softmax(z3.view(-1, self.input_size), dim=1)  # (batch_size, input_size)
             # Eqn. 10: LSTM
@@ -78,10 +73,11 @@ class Decoder(nn.Module):
         self.encoder_hidden_size = encoder_hidden_size
         self.decoder_hidden_size = decoder_hidden_size
 
-        self.attn_layer = nn.Sequential(nn.Linear(2 * decoder_hidden_size + encoder_hidden_size,
-                                                  encoder_hidden_size),
-                                        nn.Tanh(),
-                                        nn.Linear(encoder_hidden_size, 1))
+        self.attn_layer1 = nn.Linear(2 * decoder_hidden_size, encoder_hidden_size)
+        self.attn_layer2 = nn.Linear(encoder_hidden_size, encoder_hidden_size)
+        self.tanh = nn.Tanh()
+        self.attn_layer3 = nn.Linear(encoder_hidden_size, out_feats)
+
         self.lstm_layer = nn.LSTM(input_size=out_feats, hidden_size=decoder_hidden_size)
         self.fc = nn.Linear(encoder_hidden_size + out_feats, out_feats)
         self.fc_final = nn.Linear(decoder_hidden_size + encoder_hidden_size, out_feats)
@@ -99,14 +95,14 @@ class Decoder(nn.Module):
         for t in range(self.T - 1):
             # (batch_size, T, (2 * decoder_hidden_size + encoder_hidden_size))
             x = torch.cat((hidden.repeat(self.T - 1, 1, 1).permute(1, 0, 2),
-                           cell.repeat(self.T - 1, 1, 1).permute(1, 0, 2),
-                           input_encoded), dim=2)
+                           cell.repeat(self.T - 1, 1, 1).permute(1, 0, 2)), dim=2)
+            z1 = self.attn_layer1(x)
+            z2 = self.attn_layer2(input_encoded)
+            x = z1 + z2
+            z3 = self.tanh(x)
+            z4 = self.attn_layer3(z3)
             # Eqn. 12 & 13: softmax on the computed attention weights
-            x = tf.softmax(
-                    self.attn_layer(
-                        x.view(-1, 2 * self.decoder_hidden_size + self.encoder_hidden_size)
-                    ).view(-1, self.T - 1),
-                    dim=1)  # (batch_size, T - 1)
+            x = tf.softmax(z4.view(-1, self.T - 1), dim=1)  # (batch_size, T - 1)
 
             # Eqn. 14: compute context vector
             context = torch.bmm(x.unsqueeze(1), input_encoded)[:, 0, :]  # (batch_size, encoder_hidden_size)
@@ -120,4 +116,5 @@ class Decoder(nn.Module):
             cell = lstm_output[1]  # 1 * batch_size * decoder_hidden_size
 
         # Eqn. 22: final output
-        return self.fc_final(torch.cat((hidden[0], context), dim=1))
+        output = self.fc_final(torch.cat((hidden[0], context), dim=1))
+        return output
