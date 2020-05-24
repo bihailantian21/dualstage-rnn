@@ -4,6 +4,8 @@ Just utility functions for the training of the DARNN
 import typing
 import json
 import os
+import torch
+from torch.autograd import Variable
 from torch import nn
 from torch import optim
 import matplotlib.pyplot as plt
@@ -69,7 +71,7 @@ def train(net: DaRnnNet, train_data: TrainData, t_cfg: TrainConfig, logging, n_e
 
         epoch_losses[e_i] = np.mean(iter_losses[range(e_i * iter_per_epoch, (e_i + 1) * iter_per_epoch)])
 
-        if e_i % 10 == 0:
+        if e_i % 100 == 0:
             y_test_pred = predict(net, train_data,
                                   t_cfg.train_size, t_cfg.batch_size, t_cfg.T,
                                   on_train=False)
@@ -105,10 +107,14 @@ def train_iteration(t_net: DaRnnNet, loss_func: typing.Callable, X, y_history, y
     t_net.enc_opt.zero_grad()
     t_net.dec_opt.zero_grad()
 
+    X = Variable(torch.from_numpy(X).type(torch.FloatTensor).to(device))
+    y_history = Variable(torch.from_numpy(y_history).type(torch.FloatTensor).to(device))
+    y_target = Variable(torch.from_numpy(y_target).type(torch.FloatTensor).to(device))
+
     input_weighted, input_encoded = t_net.encoder(numpy_to_tvar(X))
     y_pred = t_net.decoder(input_encoded, numpy_to_tvar(y_history))
 
-    y_true = numpy_to_tvar(y_target)
+    y_true = y_target
     loss = loss_func(y_pred, y_true)
     loss.backward()
 
