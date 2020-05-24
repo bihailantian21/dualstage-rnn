@@ -186,7 +186,7 @@ if __name__ == '__main__':
     save_plots = True
     debug = False
 
-    raw_data = pd.read_csv(os.path.join("data", "nasdaq100_padding_aapl.csv"), nrows=100 if debug else None)
+    raw_data = pd.read_csv(os.path.join("data", "nasdaq100_padding.csv"), nrows=100 if debug else None)
     logger.info(f"Shape of data: {raw_data.shape}.\nMissing in data: {raw_data.isnull().sum().sum()}.")
     targ_cols = ("NDX",)
     data, scaler = preprocess_data(raw_data, targ_cols)
