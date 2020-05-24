@@ -111,8 +111,8 @@ def train_iteration(t_net: DaRnnNet, loss_func: typing.Callable, X, y_history, y
     y_history = Variable(torch.from_numpy(y_history).type(torch.FloatTensor).to(device))
     y_target = Variable(torch.from_numpy(y_target).type(torch.FloatTensor).to(device))
 
-    input_weighted, input_encoded = t_net.encoder(numpy_to_tvar(X))
-    y_pred = t_net.decoder(input_encoded, numpy_to_tvar(y_history))
+    input_weighted, input_encoded = t_net.encoder(X)
+    y_pred = t_net.decoder(input_encoded, y_history)
 
     y_true = y_target
     loss = loss_func(y_pred, y_true)
